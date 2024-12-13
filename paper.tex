@@ -279,6 +279,53 @@ Section \ref{sparse} delves into \rhyme's support for specialized code generatio
 Section \ref{evaluation} evaluates the generated code by comparing it with TACO and highlights the differences.\par
 Section \ref{conclusion} concludes the paper with a summary of our work and key takeaways.\par
 \section{Workflow}\label{workflow}
+In this section, we will walk through the end-to-end workflow of \rhyme, demonstrating how the \rhyme query get compiled and generate efficient code to execute the query. Figure \ref{workflow} demonstrates the pipeline of \rhyme compiler.\par
+\begin{figure}[H]
+  \centering
+      \includegraphics[scale=0.5]{figures/workflow.png}
+      \caption{End-to-end workflow of \rhyme}
+      \label{workflow}
+  \end{figure}
+\subsection{\rhyme Frontend}
+\iffalse
+\rhyme has multiple frontends like Pipe API, Textual API and Javascript API. \rhyme is a DSL embedded in Javascript, and as we mentioned before the \rhyme query can itself be a JSON object. Therefore we can use the JSON API to write query where the query is itself a JSON object. For example, if we want to group the sum of values of a dataset by its keys, we can just put \inline{data.*.key} as the key of the object query and put \inline{data.*.value} as the value as shown below. It is worth noting that since the \inline{sum(data.*.value)} is nested with \inline{data.*.key}, the logic variable in \inline{sum(data.*.value)} is bounded, the sum is actually a group-by sum. In addition to JSON API where the user can express the query in the same structure as the results, \rhyme also support Pipe API where the query is expressed as a sequence of transformations. The input wil pass through all the transformations to generate the final results. If we apply the logic variable \inline{.*} to a data source, the input will be iterated and a stream of its data will be passed for the following operation. The pipes are separated by \inline{|} symbol. The JSON API and Pipe API are equivalent and offers different ways to express the query for different application and scenarios. \par
+\fi
+\rhyme provides multiple frontends, including the Pipe API, Textual API, and JavaScript API. As a domain-specific language (DSL) embedded in JavaScript, \rhyme allows queries to be represented as JSON objects. This design enables users to construct queries directly in JSON format. For instance, to group the sum of values in a dataset by its keys, users can specify \inline{data..key} as the object query's key and \inline{data..value} as the value, as shown in the example below. Notably, because \inline{sum(data..value)} is nested within \inline{data..key}, the logic variable in \inline{sum(data.*.value)} is bound, making the operation a group-by sum.
+
+In addition to the JSON API, where queries are expressed in the same hierarchical structure as their results, \rhyme also offers a Pipe API. The Pipe API allows queries to be defined as a sequence of transformations, where the input data passes through each transformation step to produce the final result. By applying the logic variable \inline{.*} to a data source, the input is iterated, and a stream of data is passed to subsequent operations. Transformations in the Pipe API are separated using the \inline{|} symbol.
+
+The JSON API and Pipe API are equivalent in functionality but provide different methods for expressing queries, catering to various applications and scenarios.\par
+\vspace*{1pt}
+\noindent
+\begin{minipage}{0.5\textwidth}\label{jsonapi}
+\begin{lstlisting}
+// JSON API: group the the sum of values by their keys
+let query =  { data.*.key : sum(data.*.value) }
+\end{lstlisting}
+\end{minipage}%
+\begin{minipage}{0.5\textwidth}
+\begin{lstlisting}
+//  Pipe API: group the sum of values by their keys
+let key = rh`.data | .* | .key`
+let query = rh`.data | .* | .value | group $\$${key}`
+\end{lstlisting}
+\end{minipage}
+\vspace*{1pt}
+\iffalse
+The \rhyme query will be first parsed into an AST. The AST is a structured representation of the query and represented using JSON objects. \rhyme AST categorize operations into stateful operations (aggregation) and stateless operations (pure). The keys used for group-by will remain unchanged in the AST node. \rhyme will recursively translate the query into AST nodes and set the operator type and parameter correctly at each level.\par
+In order to support generation of strongly typed languages like C/C++, \rhyme also allows user to provide optional type schemas of the input. As shown in Figure \ref{typeschema}, the user specify that the data is an object with u8 (8-bit unsigned integer) keys and string values. This type schema is crucial for our backend code generation as it provides type information for each sub-expressions of the query and allow us to generate more specialized code.
+\fi
+The \rhyme query is first parsed into an Abstract Syntax Tree (AST), a structured representation of the query expressed as JSON objects. The \rhyme AST categorizes operations into two types: stateful operations (e.g., aggregations) and stateless operations (e.g., pure functions). Keys used for group-by operations remain unchanged within the corresponding AST nodes. The \rhyme compiler recursively translates the query into AST nodes, assigning the appropriate operator types and parameters at each level.
+
+To support code generation for strongly typed languages like C/C++, \rhyme allows users to optionally provide type schemas for the input data. As illustrated in Figure \ref{typeschema}, users can specify, for example, that the data consists of objects with 8-bit unsigned integer (u8) keys and string values. This type schema is essential for backend code generation, as it provides precise type information for each sub-expression of the query, enabling the generation of highly specialized and efficient code.
+\begin{figure}[H]
+  \centering
+      \includegraphics[scale=0.4]{figures/typeschema.png}
+      \caption{Example type schema of \rhyme}
+      \label{typeschema}
+  \end{figure}
+\subsection{\rhyme Middle-end}
+\subsection{\rhyme Backend}
 \section{Type System}\label{typesystem}
 \section{Sparse Tensor Algebra}\label{sparse}
 \section{Evaluation}\label{evaluation}
