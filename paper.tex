@@ -317,10 +317,10 @@ In order to support generation of strongly typed languages like C/C++, \rhyme al
 \fi
 The \rhyme query is first parsed into an Abstract Syntax Tree (AST), a structured representation of the query expressed as JSON objects. The \rhyme AST categorizes operations into two types: stateful operations (e.g., aggregations) and stateless operations (e.g., pure functions). Keys used for group-by operations remain unchanged within the corresponding AST nodes. The \rhyme compiler recursively translates the query into AST nodes, assigning the appropriate operator types and parameters at each level.
 
-To support code generation for strongly typed languages like C/C++, \rhyme allows users to optionally provide type schemas for the input data. As illustrated in Figure \ref{typeschema}, users can specify, for example, that the data consists of objects with 8-bit unsigned integer (u8) keys and string values. This type schema is essential for backend code generation, as it provides precise type information for each sub-expression of the query, enabling the generation of highly specialized and efficient code.
+To support code generation for strongly typed languages like C/C++, \rhyme allows users to optionally provide type schemas for the input data. As illustrated in Figure \ref{typeschema}, users can specify, for example, that the data consists of objects with 8-bit unsigned integer (u8) keys and string values. This type schema is essential for backend code generation, as it provides precise type information for each sub-expression of the query, enabling the generation of highly specialized and efficient code. We will talk about the type system more extensively in Section \ref{typesystem}.
 \begin{figure}[H]
   \centering
-      \includegraphics[scale=0.4]{figures/typeschema.png}
+      \includegraphics[scale=0.4]{figures/typeschema2.png}
       \caption{Example type schema of \rhyme}
       \label{typeschema}
   \end{figure}
