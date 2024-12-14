@@ -131,6 +131,8 @@
 \usepackage{stackengine}
 \usepackage{mathpartir}
 \usepackage{float}
+\usepackage{bcprules}
+\usepackage{semantic, stmaryrd}
 \input{macros}
 
 %%
@@ -155,6 +157,7 @@
 \newcommand{\Mem}{\mathbb{M}}
 \newcommand{\Value}{\mathcal{V}}
 \newcommand{\Loc}{\msf{Loc}}
+\newcommand{\subtype}{\leq:}
 \begin{document}
 \sloppy
 
@@ -354,6 +357,187 @@ To address these challenges, we formalize the dependency constraints that the co
 
 Once an optimal program structure is determined, \rhyme translates the IR nodes into code for the target backend language. During this translation, the type information is used to generate accurate type signatures and insert explicit type casts where necessary. This ensures the generated code is both correct and efficient for the specific backend.\par
 \section{Type System}\label{typesystem}
+\iffalse
+In the section, we will dive deep into the type system and type checking/inference algorithms for \rhyme. Formally, the type id defined as sets of possible values. And we have a \emph{Any} type $\top$ which represents the universal set of all possible values, and a \emph{Never} type $\bot$ which represents the empty set. These serve as the top and bottom of our type lattice. \rhyme has multiple primitive types:
+\begin{itemize}
+  \item \emph{Number type}: \rhyme has unsigned integer $U$, signed integer $I$ and floating point numbers $F$ as primitive number type, $N = U \cup I \cup F$.\begin{itemize}
+    \item Unsigned integer: $U = \{ u8, u16, u32, u64 \}$
+    \item Signed integer: $I = \{ i8, i16, i32, i64 \}$
+    \item Floating point: $F = \{ f32, f64 \}$
+  \end{itemize}
+  \item \emph{String type}: String is a native type in \rhyme system and represents the set of all strings.
+  \item \emph{Tensor type}: \rhyme supports both sparse and dense tensor algebra, therefore we also support tensor types. $T = <\text{mode}, \text{dims}, \text{elemTy}>$, tensor types are a tuple: \begin{itemize}
+    \item mode: mode represents whether the tensor is sparse or dense.
+    \item dims: dims record the dimensions of tensor, \rhyme allows arbitrary dimension tensors.
+    \item elemTy: elemTy records the elemTy of a Tensor, it can be any number types.
+  \end{itemize}
+  \item \emph{Object type}: \rhyme supports object types, object types itself is also an object where the key is the key type and value is the value type. For example, \inline{{u8: string}} is a valid object type.
+  \item \emph{Key type}: key types can represent the set of keys for certain object. Since different objects may have different domains, even though their key type is the same (for example, both i32), their key domains may not be the same. Therefore, we also a key type, $K_n(T)$ representing the exact key set of an object.
+  \item \emph{Nothing type and Error type}: An expression can produce no values or throw an error (divide by zero). We want to propagate these information as much as we can. Therefore, \rhyme also includes both the \emph{Nothing} ($\mathcal{N}$) and \emph{Error} ($\mathcal{E}$) type.
+\end{itemize}
+\fi
+In this section, we delve into the type system and the type checking/inference algorithms for \rhyme. Formally, a type is defined as a set of possible values. We define an \emph{Any} type $\top$, representing the universal set of all possible values, and a \emph{Never} type $\bot$, representing the empty set. These serve as the top and bottom elements of the type lattice, respectively.
+\subsection{Primitive Types}
+\rhyme supports multiple primitive types:
+
+\begin{itemize} \item \textbf{Number type}: \rhyme includes unsigned integers ($U$), signed integers ($I$), and floating-point numbers ($F$) as primitive numeric types, collectively represented as $N = U \cup I \cup F$. \begin{itemize} \item Unsigned integers: $U = { u8, u16, u32, u64 }$ \item Signed integers: $I = { i8, i16, i32, i64 }$ \item Floating-point numbers: $F = { f32, f64 }$ \end{itemize}
+
+\item \textbf{String type}: Strings are a native type in the \rhyme system and represent the set of all possible strings.
+
+\item \textbf{Tensor type}: To support both sparse and dense tensor algebra, \rhyme introduces tensor types, denoted as $T = \langle \emph{mode}, \emph{dims}, \emph{elemTy} \rangle$. A tensor type is a tuple consisting of: \begin{itemize} \item \emph{mode}: Indicates whether the tensor is sparse or dense. \item \emph{dims}: Represents the dimensions of the tensor; \rhyme supports tensors with arbitrary dimensions. \item \emph{elemTy}: Specifies the element type of the tensor, which can be any numeric type. \end{itemize}
+
+\item \textbf{Object type}: \rhyme supports object types, where an object type is itself an object defined by key-value pairs. The key specifies the key type, and the value specifies the value type. For example, \inline{\{u8: string\}} is a valid object type.
+
+\item \textbf{Key type}: Key types represent the set of keys for specific objects. Since objects may have different key domains, even if their key types are identical (e.g., both are $i32$), the specific key domains may differ. To handle this, \rhyme includes a key type $K_n(T)$, representing the exact key set of an object.
+
+\item \textbf{Nothing type and Error type}: An expression can produce no values (e.g., in cases of empty results) or throw an error (e.g., division by zero). To propagate this information, \rhyme includes the \emph{Nothing} type ($\mathcal{N}$) and the \emph{Error} type ($\mathcal{E}$). \end{itemize}
+\subsection{Union Type and Intersection Type}
+\iffalse
+\rhyme also supports union type and intersection type.
+\begin{itemize}
+  \item \textbf{Union type}: Since an expression can produce either a valid result or an error and we want to propagate the error message. We support union type to carry the additional \emph{Error type} in the result type. For example, a 32-bit floating point division's result will have type $f32 \cup \mathcal{E}$ which means the result is either a 32 bit floating point number or an error.
+  \item \textbf{Intersection Type}: Since a generator can iterate over multiple data sources, and different data sources may have different domains, the type of the generator is the intersection of the types of the input domains. For example, if we have both $A.*$ and $B.*$ in one query, and the key type of $A$ is $K_a$, the key type of $B$ is $K_b$. The type of the generator $*$ is $K_a \cap K_b$.
+\end{itemize}
+\fi
+\rhyme also supports union types and intersection types:
+
+\begin{itemize} \item \textbf{Union type}: Since an expression can produce either a valid result or an error, and we want to propagate the error message, \rhyme supports union types to include the \emph{Error type} in the result type. For example, the result of a 32-bit floating-point division will have the type $f32 \cup \mathcal{E}$, indicating that the result is either a 32-bit floating-point number or an error.
+
+\item \textbf{Intersection type}: When a generator iterates over multiple data sources, and those data sources have different domains, the generator's type is the intersection of the input domain types. For instance, if a query involves both $A.\ast$ and $B.\ast$, where the key type of $A$ is $K_a$ and the key type of $B$ is $K_b$, the type of the generator $\ast$ is $K_a \cap K_b$. \end{itemize}
+\subsection{Subtyping}
+\iffalse
+We also support subtyping in our type system since we support multiple bits numbers, union type, intersection type. Let the subtype relation be The subtype rules for \rhyme are pretty straight forward and are listed below.\par
+\noindent
+\begin{minipage}{0.5\textwidth}
+\begin{figure}[H]
+  \centering
+$u8 \leq: u16 \leq: u32 \leq: u64$\par
+\vspace*{2mm}
+$i8 \leq: i16 \leq: i32 \leq: i64$\par
+\vspace*{2mm}
+$f32 \leq: f64$, $u8 \leq: i16$, $u16 \leq: i32$, $u32 \leq: i64$\par
+\vspace*{2mm}
+$i16 \leq: f32$, $u16 \leq: f32$\par
+\vspace*{2mm}
+$i32 \leq: f64$, $u32 \leq: f64$
+\caption*{Number type subtyping rules}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.5\textwidth}
+  \centering
+\begin{figure}[H]
+$\inference {} {|- T \leq: \top}$ \hspace*{10mm} $\inference {} {|- \bot \leq: T}$\par
+\vspace*{4mm}
+$\inference {\Gamma |- x: T \quad |- T \leq: S}{\Gamma |- x: S}$ \hspace*{4mm}
+$\inference {}{|- T \leq: T}$\par
+\vspace*{4mm}
+$\inference {|- T \leq: S \quad |- S \leq: T}{|- S =: T}$
+$\inference {|- S =: T}{|- T \leq: S \quad |- S \leq: T}$
+\caption*{Basic subtyping rules}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.5\textwidth}
+\begin{figure}[H]
+  \centering
+\vspace*{5mm}
+$\inference {}{|- T \leq: (T \cup S)}$\hspace*{2mm}
+$\inference {}{|- (S \cup T) =: (T \cup S)}$\par
+\vspace*{4mm}
+$\inference {}{|- (T \cup T) =: T}$\hspace*{2mm}
+$\inference {|- T \leq: S}{|- (T \cup S) =: S}$
+\caption*{Union type subtyping rules}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.5\textwidth}
+\begin{figure}[H]
+  \centering
+\vspace*{5mm}
+$\inference {\Gamma |- t : T \quad \Gamma |- t : S}{\Gamma |- t : (T \cap S)}$\hspace*{2mm}
+$\inference {}{|- (T \cap S) \leq: T}$\par
+\vspace*{4mm}
+$\inference {}{|- (S \cap T) =: (T \cap S)}$\hspace*{2mm}
+$\inference {}{|- (T \cap T) =: T}$\par
+\vspace*{4mm}
+$\inference {|- T \leq: S}{|- (T \cap S) =: T}$
+\caption*{Intersection type subtyping rules}
+\end{figure}
+\end{minipage}
+\subsection{Type checking and inference}
+After the input type schema is passed, \rhyme will perform type inference and type checking to make sure the type schema is conformed and we can assign a valid type for each sub expression. We will infer the type of all sub expressions from the given type schema. We will iteratively perform type infer using existing knowledge while perform type checking and lifting to ensure correctness. The type inference and checking algorithms work on the following statements:
+\begin{itemize}
+  \item \textbf{Stateful operations}: If we know the type of $a$ is $T$, we know that the aggregation of $a$ has the same type. It is worth noting that even if $T$ is a union type that carry \emph{Nothing type} $\mathcal{N}$, the aggregation of $a$ may not carry the \emph{Nothing type} as aggregations (like sum) have an initial value and may skip over empty values.
+  \item \textbf{Pure operations}: On pure operations like plus or multiplication, \rhyme will first infer the type of its operands, and use the super type of its operands' type as its type. \rhyme will also keep track of the error conditions like \emph{Nothing type} and \emph{Error type} in the operands and propagate them upwards. \rhyme backend will also add explicit type cast if an operand is lifted to its super type, for example, if we add \inline{u8} with \inline{u32}, we need to cast the first operand to \inline{u32}.
+  \item \textbf{Generators}: We will also infer the type of generators from the type schema of the data sources it iterates over. As we mentioned above, the generator's type is the intersection of the key type of its data sources. For example, if we know \inline{input} is a 1-D dense tensor with \inline{i32} elements, and we apply the generator \inline{*} to it. We know that the type of \inline{*} is \inline{u32} and the type of \inline{input.*} is \inline{i32}. We also know that \inline{*} is in a continuous range, so we can just increment \inline{*} by one for iteration. This may not be the case for sparse tensors.
+\end{itemize}
+\fi
+We also support subtyping in our type system, which is essential for handling multiple bit-width numbers, type casting, union types, and intersection types. Let the subtype relation be $\leq:$, the subtype rules for \rhyme are outlined below.\par
+\noindent
+\begin{minipage}{0.5\textwidth}
+\begin{figure}[H]
+  \centering
+$u8 \leq: u16 \leq: u32 \leq: u64$\par
+\vspace*{2mm}
+$i8 \leq: i16 \leq: i32 \leq: i64$\par
+\vspace*{2mm}
+$f32 \leq: f64$, $u8 \leq: i16$, $u16 \leq: i32$, $u32 \leq: i64$\par
+\vspace*{2mm}
+$i16 \leq: f32$, $u16 \leq: f32$\par
+\vspace*{2mm}
+$i32 \leq: f64$, $u32 \leq: f64$
+\caption*{Number type subtyping rules}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.5\textwidth}
+  \centering
+\begin{figure}[H]
+$\inference {} {|- T \leq: \top}$ \hspace*{10mm} $\inference {} {|- \bot \leq: T}$\par
+\vspace*{4mm}
+$\inference {\Gamma |- x: T \quad |- T \leq: S}{\Gamma |- x: S}$ \hspace*{4mm}
+$\inference {}{|- T \leq: T}$\par
+\vspace*{4mm}
+$\inference {|- T \leq: S \quad |- S \leq: T}{|- S =: T}$
+$\inference {|- S =: T}{|- T \leq: S \quad |- S \leq: T}$
+\caption*{Basic subtyping rules}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.5\textwidth}
+\begin{figure}[H]
+  \centering
+\vspace*{5mm}
+$\inference {}{|- T \leq: (T \cup S)}$\hspace*{2mm}
+$\inference {}{|- (S \cup T) =: (T \cup S)}$\par
+\vspace*{4mm}
+$\inference {}{|- (T \cup T) =: T}$\hspace*{2mm}
+$\inference {|- T \leq: S}{|- (T \cup S) =: S}$
+\caption*{Union type subtyping rules}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.5\textwidth}
+\begin{figure}[H]
+  \centering
+\vspace*{5mm}
+$\inference {\Gamma |- t : T \quad \Gamma |- t : S}{\Gamma |- t : (T \cap S)}$\hspace*{2mm}
+$\inference {}{|- (T \cap S) \leq: T}$\par
+\vspace*{4mm}
+$\inference {}{|- (S \cap T) =: (T \cap S)}$\hspace*{2mm}
+$\inference {}{|- (T \cap T) =: T}$\par
+\vspace*{4mm}
+$\inference {|- T \leq: S}{|- (T \cap S) =: T}$
+\caption*{Intersection type subtyping rules}
+\end{figure}
+\end{minipage}
+
+\subsection{Type Checking and Inference} Once the input type schema is provided, \rhyme performs type inference and type checking to ensure that the type schema conforms and that valid types can be assigned to all sub-expressions. The algorithm iteratively infers types based on existing information while performing type checking and lifting to maintain correctness. The type inference and checking algorithms operate on the following constructs:
+
+\begin{itemize} \item \textbf{Stateful operations}: If the type of $a$ is $T$, then the aggregation of $a$ has the same type $T$. Note that even if $T$ is a union type that includes the \emph{Nothing type} $\mathcal{N}$, the aggregation of $a$ may not propagate the \emph{Nothing type} because aggregations (e.g., \texttt{sum}) use an initial value and may skip empty entries.
+
+\item \textbf{Pure operations}: For pure operations like addition or multiplication, \rhyme infers the types of the operands and assigns the supertype of the operands' types as the result type. Additionally, \rhyme tracks error conditions such as the \emph{Nothing type} and \emph{Error type} in the operands and propagates them upward. If an operand is lifted to its supertype, the backend adds explicit type casts where necessary. For example, adding \inline{u8} to \inline{u32} requires casting the first operand to \inline{u32}.
+
+\item \textbf{Generators}: Generator types are inferred based on the type schema of the data sources they iterate over. As mentioned earlier, the generator's type is the intersection of the key types of its data sources. For instance, if \inline{input} is a 1-D dense tensor with \inline{i32} elements and the generator \inline{*} is applied, the type of \inline{*} is \inline{u32}, and the type of \inline{input.*} is \inline{i32}. Since \inline{*} iterates over a continuous range, it can be incremented by one for each iteration. However, this is not guaranteed for sparse tensors. \end{itemize}\par
+\iffalse
+\rhyme 's type system lays the foundations for specialized code generation for strongly typed languages like C/C++ as well as sparse tensor algebra. Dense tensor and sparse tensor has different characteristics and require different methods for both data loading as well as efficient co-iteration. We will cover how this type system facilitates efficient code generation for Sparse Tensor Algebra in the next section.
+\fi
+\rhyme's type system forms the foundation for specialized code generation for strongly typed languages like C/C++ as well as for sparse tensor algebra. Dense tensors and sparse tensors have distinct characteristics, requiring different strategies for both data loading and efficient co-iteration. In the next section, we will discuss how this type system supports the efficient code generation of sparse tensor algebra.
 \section{Sparse Tensor Algebra}\label{sparse}
 \section{Evaluation}\label{evaluation}
 \section{Conclusion}\label{conclusion}
