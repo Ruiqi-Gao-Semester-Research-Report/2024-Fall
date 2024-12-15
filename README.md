@@ -12,8 +12,6 @@ in the root folder, and the generated pdf file will be ``build/paper.pdf``
 make clean
 ```
 
-# Code and Experiment
-Code and Reproducible Evaluation are available [here](https://github.com/rhyme-lang/rhyme) and [here](https://github.com/Kuigesi/2024-spring-report-reproducible).
 
 # Required LaTeX Packages
 ## Texlive
